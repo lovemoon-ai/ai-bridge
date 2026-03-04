@@ -8,7 +8,7 @@ build-public:
 	mv private src/adapters/
 
 install: build
-	npm link @love-moon/ai-bridge
+	npm link
 
 uninstall:
 	npm unlink -g @love-moon/ai-bridge
