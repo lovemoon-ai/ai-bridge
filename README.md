@@ -2,7 +2,9 @@
 
 >  Break down tool barriers, let your AI sessions flow freely.
 
-AI Bridge lets you migrate session history between different AI coding tools. Halfway through a conversation in Claude and want to switch to Codex? No problem.
+AI Bridge lets you migrate session history between different AI coding tools. 
+
+Halfway through a conversation in Claude and want to switch to Codex? No problem.
 
 ## ✨ Core Features
 
