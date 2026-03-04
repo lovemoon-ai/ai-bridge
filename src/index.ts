@@ -3,6 +3,7 @@
 import { Command } from "commander";
 import { bridgeCommand } from "./commands/bridge.js";
 import { listCommand } from "./commands/list.js";
+import { updateCommand } from "./commands/update.js";
 import { listSupportedTools } from "./adapters/registry.js";
 
 const program = new Command();
@@ -48,6 +49,16 @@ program
     } else {
       program.help();
     }
+  });
+
+// ── Update command ──────────────────────────────────────────
+program
+  .command("update")
+  .description("Check for and install updates to ai-bridge")
+  .option("-f, --force", "force update even if already on latest version", false)
+  .option("-y, --yes", "skip confirmation prompt", false)
+  .action(async (opts) => {
+    await updateCommand(opts.force, opts.yes);
   });
 
 program.parse();

@@ -1,69 +1,94 @@
 # AI Bridge 🌉
 
-> 跨 AI 工具会话迁移，一行命令搞定。
+> Seamless AI tool session migration, one command away.
 
-AI Bridge 让你在不同的 AI 编程工具之间无缝迁移会话历史。在 Claude 里聊了一半，想换到 Codex 继续？没问题。
+AI Bridge lets you migrate session history between different AI coding tools. Halfway through a conversation in Claude and want to switch to Codex? No problem.
 
-## ✨ 核心功能
+## ✨ Core Features
 
-- **🔀 无缝迁移** - 在 Claude、Codex、Copilot、Kimi 等工具间迁移会话
-- **📦 统一格式** - 中间表示层(IR)确保数据不丢失
-- **⚡ 一键恢复** - 自动生成目标工具的 resume 命令
-- **🔌 插件化架构** - 轻松扩展新 backend
+- **🔀 Seamless Migration** - Migrate sessions between Claude, Codex, Copilot, Kimi, Trae, and more
+- **📦 Unified Format** - Intermediate Representation (IR) ensures no data loss
+- **⚡ One-Click Resume** - Auto-generates resume commands for target tools
+- **🔌 Plugin Architecture** - Easily extend with new backends
 
-## 🚀 快速开始
+## 🚀 Quick Start
+
+### Global Installation
 
 ```bash
-# 构建
-npm run build
+npm install -g @love-moon/ai-bridge
 
-# 查看支持的 backend
-node ./dist/index.js --list-backend
+# List supported backends
+ai-bridge --list-backend
 
-# 迁移会话（示例：从 Claude 到 Codex）
-node ./dist/index.js --from claude:abc123 --to codex
+# Migrate session (example: from Claude to Codex)
+ai-bridge --from claude:abc123 --to codex
 
-# 查看某 backend 的会话列表
-node ./dist/index.js --list-session claude
+# List sessions for a backend
+ai-bridge --list-session claude
 ```
 
-## 🛠️ 支持的 Backend
+### Build from Source
 
-| Backend | 读取 | 写入 |
-|---------|------|------|
+```bash
+git clone <repo>
+cd ai-bridge
+npm install
+npm run build
+
+# Use local build
+node ./dist/index.js --list-backend
+```
+
+## 🛠️ Supported Backends
+
+| Backend | Read | Write |
+|---------|------|-------|
 | Claude | ✅ | ✅ |
 | Codex | ✅ | ✅ |
 | Copilot | ✅ | ✅ |
 | Kimi | ✅ | ✅ |
+| Trae | ✅ | ✅ |
+| TraeCLI | ✅ | - |
 
-## 📖 文档
+## 📖 Documentation
 
-- [如何添加新 Backend](./docs/how-to-add-a-new-backend.md)
+- [How to Add a New Backend](./docs/how-to-add-a-new-backend.md)
 
-## 🏗️ 架构
+## 🏗️ Architecture
 
 ```
 src/
-├── adapters/          # 各 AI 工具适配器
+├── adapters/          # AI tool adapters
 │   ├── claude/
 │   ├── codex/
-│   ├── private/       # 私有适配器
-│   └── registry.ts    # 动态注册
-├── commands/          # CLI 命令
-├── types.ts           # IR 定义
-└── utils/             # 通用工具
+│   ├── private/       # Private adapters
+│   └── registry.ts    # Dynamic registration
+├── commands/          # CLI commands
+├── types.ts           # IR definitions
+└── utils/             # Utilities
 ```
 
-## 🔧 开发
+## 🔧 Development
 
 ```bash
-# 开发模式
+# Dev mode
 npm run dev -- --list-backend
 
-# 构建
+# Build
 npm run build
+```
+
+## 📝 Publishing
+
+```bash
+# Auto-increment patch version
+./scripts/publish-npm.sh
+
+# Or specify version
+./scripts/publish-npm.sh 0.2.0
 ```
 
 ---
 
-**AI Bridge** - 打破工具壁垒，让你的 AI 会话自由流动。
+**AI Bridge** - Break down tool barriers, let your AI sessions flow freely.

@@ -5,13 +5,21 @@ ROOT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 NPM_REGISTRY=${NPM_REGISTRY:-https://registry.npmjs.org/}
 PACKAGE_JSON="$ROOT_DIR/package.json"
 
-if [[ $# -lt 1 ]]; then
-  echo "Usage: $(basename "$0") <version>"
-  echo "Example: $(basename "$0") 0.1.0"
-  exit 1
-fi
+get_current_version() {
+  node -e '
+    const fs = require("fs");
+    const pkg = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+    console.log(pkg.version);
+  ' "$PACKAGE_JSON"
+}
 
-TARGET_VERSION=$1
+increment_patch() {
+  local version=$1
+  local major=$(echo "$version" | cut -d. -f1)
+  local minor=$(echo "$version" | cut -d. -f2)
+  local patch=$(echo "$version" | cut -d. -f3)
+  echo "${major}.${minor}.$((patch + 1))"
+}
 
 update_package_json_version() {
   local package_json_path=$1
@@ -33,6 +41,23 @@ cleanup() {
   fi
 }
 trap cleanup EXIT
+
+CURRENT_VERSION=$(get_current_version)
+
+if [[ $# -lt 1 ]]; then
+  TARGET_VERSION=$(increment_patch "$CURRENT_VERSION")
+  echo "No version specified. Auto-incrementing patch version."
+  echo "Current: ${CURRENT_VERSION}"
+  echo "Target:  ${TARGET_VERSION}"
+  echo ""
+  read -p "Proceed with ${TARGET_VERSION}? [Y/n] " answer
+  if [[ -n "${answer:-}" && "${answer:-}" != "y" && "${answer:-}" != "Y" ]]; then
+    echo "Aborted."
+    exit 1
+  fi
+else
+  TARGET_VERSION=$1
+fi
 
 echo "Updating package version to ${TARGET_VERSION}..."
 update_package_json_version "$PACKAGE_JSON" "$TARGET_VERSION"
@@ -66,10 +91,10 @@ fi
 echo "==> Building..."
 npm run build
 
-echo "==> Publishing ai-bridge@${TARGET_VERSION}..."
+echo "==> Publishing @love-moon/ai-bridge@${TARGET_VERSION}..."
 if ! npm publish "${PUBLISH_FLAGS[@]}"; then
   echo "npm publish failed"
   exit 1
 fi
 
-echo "✓ Successfully published ai-bridge@${TARGET_VERSION}"
+echo "✓ Successfully published @love-moon/ai-bridge@${TARGET_VERSION}"

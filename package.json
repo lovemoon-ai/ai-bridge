@@ -1,6 +1,6 @@
 {
-  "name": "ai-bridge",
-  "version": "0.1.0",
+  "name": "@love-moon/ai-bridge",
+  "version": "0.1.1",
   "description": "Cross-AI-Tool Session Sharing CLI",
   "type": "module",
   "bin": {
