@@ -21,6 +21,7 @@ program
   .option("--list-session [tool]", "list sessions (optionally for a specific backend)")
   .option("--dry-run", "show what would happen without writing", false)
   .option("--verbose", "enable verbose output", false)
+  .option("--skip-tools", "skip tool calls and results in the target session", false)
   .action(async (opts) => {
     if (opts.listBackend) {
       const tools = await listSupportedTools();
@@ -42,6 +43,7 @@ program
       await bridgeCommand(opts.from, opts.to, {
         dryRun: opts.dryRun,
         verbose: opts.verbose,
+        skipTools: opts.skipTools,
       });
     } else if (opts.from || opts.to) {
       console.error("Both --from and --to are required.");

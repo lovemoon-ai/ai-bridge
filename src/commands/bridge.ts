@@ -9,6 +9,7 @@ import { join } from "node:path";
 export interface BridgeOptions {
   dryRun?: boolean;
   verbose?: boolean;
+  skipTools?: boolean;
 }
 
 function parseToolName(input: string, supported: ToolName[]): ToolName | null {
@@ -77,8 +78,16 @@ export async function bridgeCommand(
 
   // ── Step 2: Read → IR ────────────────────────────────────
   log(`[2/5] Reading session from ${source.tool}...`);
-  const entries = await sourceAdapter.read(session);
+  let entries = await sourceAdapter.read(session);
   log(`  Read ${entries.length} IR entries`);
+
+  // ── Step 2.5: Filter tool calls if skipTools is enabled ───
+  if (opts.skipTools) {
+    const originalCount = entries.length;
+    entries = entries.filter((e) => e.type !== "tool_call" && e.type !== "tool_result");
+    const filteredCount = originalCount - entries.length;
+    log(`  Filtered out ${filteredCount} tool-related entries (--skip-tools)`);
+  }
 
   // ── Step 3: Save IR (always) ─────────────────────────────
   const irDir = join(homedir(), ".ai-bridge", "sessions");
