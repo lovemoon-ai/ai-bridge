@@ -1,3 +1,7 @@
+# AI Bridge 🌉
+
+>  Break down tool barriers, let your AI sessions flow freely.
+
 <div align="center">
   <a href="https://www.youtube.com/watch?v=NJ2M8zWC19U">
     <img src="https://img.shields.io/badge/YouTube-Demo-red?labelColor=grey&logo=youtube" alt="YouTube Demo">
@@ -7,13 +11,11 @@
   </a>
 </div>
 
-# AI Bridge 🌉
-
->  Break down tool barriers, let your AI sessions flow freely.
-
 AI Bridge lets you migrate session history between different AI coding tools. 
 
-Halfway through a conversation in Claude and want to switch to Codex? No problem.
+Halfway through a conversation in Claude and want to switch to Codex?
+
+No problem.
 
 ## ✨ Core Features
 
