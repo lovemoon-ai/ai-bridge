@@ -1,3 +1,12 @@
+<div align="center">
+  <a href="https://www.youtube.com/watch?v=NJ2M8zWC19U">
+    <img src="https://img.shields.io/badge/YouTube-Demo-red?labelColor=grey&logo=youtube" alt="YouTube Demo">
+  </a>
+  <a href="https://www.npmjs.com/package/@love-moon/ai-bridge">
+    <img src="https://img.shields.io/badge/npm-@love--moon/ai--bridge-green?labelColor=grey&logo=npm" alt="NPM Package">
+  </a>
+</div>
+
 # AI Bridge 🌉
 
 >  Break down tool barriers, let your AI sessions flow freely.
