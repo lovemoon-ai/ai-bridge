@@ -47,12 +47,12 @@ export async function listCommand(toolName?: string): Promise<void> {
     });
 
     for (const s of sessions.slice(0, 20)) {
-      const shortId = s.sessionId.slice(0, 8);
+      const sessionId = s.sessionId;
       const title = s.title ? truncate(s.title, 50) : "(untitled)";
       const date = s.createdAt
         ? new Date(s.createdAt).toLocaleDateString()
         : "";
-      console.log(`  ${shortId}  ${title.padEnd(52)} ${date}`);
+      console.log(`  ${sessionId.padEnd(32)} ${title.padEnd(52)} ${date}`);
     }
 
     if (sessions.length > 20) {

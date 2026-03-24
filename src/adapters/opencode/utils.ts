@@ -1,19 +1,24 @@
 import { createHash, randomBytes } from "node:crypto";
+import { execFile } from "node:child_process";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { readdir } from "node:fs/promises";
+import { fileExists } from "../../utils/fs.js";
 
 export const OPENCODE_BASE = join(
   process.env.XDG_DATA_HOME || join(homedir(), ".local", "share"),
   "opencode",
 );
 
+export const OPENCODE_DB = join(OPENCODE_BASE, "opencode.db");
 export const OPENCODE_STORAGE = join(OPENCODE_BASE, "storage");
 export const OPENCODE_PROJECTS = join(OPENCODE_STORAGE, "project");
 export const OPENCODE_SESSIONS = join(OPENCODE_STORAGE, "session");
 export const OPENCODE_MESSAGES = join(OPENCODE_STORAGE, "message");
 export const OPENCODE_PARTS = join(OPENCODE_STORAGE, "part");
 export const OPENCODE_SESSION_DIFF = join(OPENCODE_STORAGE, "session_diff");
+
+export type OpenCodeStorageMode = "json" | "db";
 
 export interface OpenCodeProjectRecord {
   id: string;
@@ -90,4 +95,64 @@ export async function listSessionFiles(): Promise<string[]> {
   }
 
   return results.sort((a, b) => b.localeCompare(a));
+}
+
+export async function detectInstalledOpenCodeVersion(): Promise<string | null> {
+  const override = process.env.AIBRIDGE_OPENCODE_VERSION?.trim();
+  if (override) return override;
+
+  const output = await execFileText("opencode", ["--version"]);
+  if (!output) return null;
+
+  const match = output.match(/\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?/);
+  return match?.[0] ?? null;
+}
+
+export async function resolveOpenCodeStorageMode(): Promise<OpenCodeStorageMode> {
+  const override = process.env.AIBRIDGE_OPENCODE_STORAGE_MODE?.trim().toLowerCase();
+  if (override === "json" || override === "db") return override;
+
+  const version = await detectInstalledOpenCodeVersion();
+  if (version) {
+    return compareVersions(version, "1.2.0") >= 0 ? "db" : "json";
+  }
+
+  const hasDb = await fileExists(OPENCODE_DB);
+  const sessionFiles = await listSessionFiles();
+  if (hasDb && sessionFiles.length === 0) return "db";
+  if (!hasDb && sessionFiles.length > 0) return "json";
+  if (hasDb) return "db";
+  return "json";
+}
+
+function execFileText(command: string, args: string[]): Promise<string | null> {
+  return new Promise((resolve) => {
+    execFile(command, args, { encoding: "utf-8" }, (error, stdout, stderr) => {
+      if (error) {
+        resolve(null);
+        return;
+      }
+      resolve((stdout || stderr || "").trim() || null);
+    });
+  });
+}
+
+function compareVersions(a: string, b: string): number {
+  const pa = normalizeVersionParts(a);
+  const pb = normalizeVersionParts(b);
+  const maxLen = Math.max(pa.length, pb.length);
+  for (let i = 0; i < maxLen; i += 1) {
+    const av = pa[i] ?? 0;
+    const bv = pb[i] ?? 0;
+    if (av !== bv) return av - bv;
+  }
+  return 0;
+}
+
+function normalizeVersionParts(version: string): number[] {
+  const main = version.trim().replace(/^v/i, "").split(/[+-]/, 1)[0] ?? "";
+  return main.split(".").map((part) => {
+    const n = Number.parseInt(part, 10);
+    return Number.isFinite(n) ? n : 0;
+  });
 }

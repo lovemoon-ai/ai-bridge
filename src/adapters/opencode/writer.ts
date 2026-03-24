@@ -1,22 +1,25 @@
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 import type {
   IREntry,
   IRSessionMeta,
 } from "../../types.js";
-import { readJson, writeJson } from "../../utils/fs.js";
+import { ensureDir, readJson, writeJson } from "../../utils/fs.js";
 import { isoNow } from "../../utils/id.js";
 import {
+  OPENCODE_DB,
   OPENCODE_MESSAGES,
   OPENCODE_PARTS,
   OPENCODE_PROJECTS,
   OPENCODE_SESSIONS,
   OPENCODE_SESSION_DIFF,
+  detectInstalledOpenCodeVersion,
   isoToUnixMs,
   opencodeId,
   opencodeProjectIdForCwd,
   opencodeSlug,
   listProjectFiles,
+  resolveOpenCodeStorageMode,
   type OpenCodeProjectRecord,
 } from "./utils.js";
 
@@ -164,24 +167,26 @@ interface PendingAssistantBundle {
   toolsByCallId: Map<string, Extract<OpenCodePart, { type: "tool" }>>;
 }
 
+type OpenCodeDb = import("node:sqlite").DatabaseSync;
+
 export async function writeOpenCodeSession(
   entries: IREntry[],
   targetCwd: string,
 ): Promise<string> {
   const nowIso = isoNow();
   const meta = entries.find((entry) => entry.type === "session_meta") as IRSessionMeta | undefined;
+  const storageMode = await resolveOpenCodeStorageMode();
+  const opencodeVersion = await detectInstalledOpenCodeVersion();
   const sessionId = opencodeId("ses");
   const createdAtMs = isoToUnixMs(meta?.created_at, Date.now());
-  const project = await resolveProject(targetCwd, createdAtMs);
+  const project = await resolveProject(targetCwd, createdAtMs, storageMode);
   const projectId = project.id;
   const sessionTitle = meta?.title || extractFirstUserText(entries) || `Bridged session ${sessionId.slice(-8)}`;
-
-  await writeJson(join(OPENCODE_PROJECTS, `${projectId}.json`), project);
 
   const sessionRecord: OpenCodeSessionRecord = {
     id: sessionId,
     slug: opencodeSlug(sessionId),
-    version: "ai-bridge",
+    version: opencodeVersion || "ai-bridge",
     projectID: projectId,
     directory: targetCwd,
     title: sessionTitle,
@@ -409,15 +414,21 @@ export async function writeOpenCodeSession(
     : createdAtMs;
   sessionRecord.time.updated = updatedAtMs;
 
-  await writeJson(join(OPENCODE_SESSIONS, projectId, `${sessionId}.json`), sessionRecord);
-  await writeJson(join(OPENCODE_SESSION_DIFF, `${sessionId}.json`), []);
+  if (storageMode === "db") {
+    await writeDbSession(project, sessionRecord, messages);
+  } else {
+    await writeJson(join(OPENCODE_PROJECTS, `${projectId}.json`), project);
+    await writeJson(join(OPENCODE_SESSIONS, projectId, `${sessionId}.json`), sessionRecord);
 
-  for (const item of messages) {
-    await writeJson(join(OPENCODE_MESSAGES, sessionId, `${item.message.id}.json`), item.message);
-    for (const part of item.parts) {
-      await writeJson(join(OPENCODE_PARTS, item.message.id, `${part.id}.json`), part);
+    for (const item of messages) {
+      await writeJson(join(OPENCODE_MESSAGES, sessionId, `${item.message.id}.json`), item.message);
+      for (const part of item.parts) {
+        await writeJson(join(OPENCODE_PARTS, item.message.id, `${part.id}.json`), part);
+      }
     }
   }
+
+  await writeJson(join(OPENCODE_SESSION_DIFF, `${sessionId}.json`), []);
 
   return sessionId;
 }
@@ -439,7 +450,55 @@ async function buildProjectRecord(
   };
 }
 
-async function resolveProject(targetCwd: string, createdAtMs: number): Promise<OpenCodeProjectRecord> {
+async function resolveProject(
+  targetCwd: string,
+  createdAtMs: number,
+  storageMode: "json" | "db",
+): Promise<OpenCodeProjectRecord> {
+  if (storageMode === "db") {
+    const dbProject = await withWritableOpenCodeDb((db) => {
+      ensureDbSchema(db);
+      const row = db
+        .prepare(
+          `select
+            id,
+            worktree,
+            vcs,
+            sandboxes,
+            time_created as createdAtMs,
+            time_updated as updatedAtMs,
+            time_initialized as initializedAtMs
+          from project
+          where worktree = ?
+          limit 1`,
+        )
+        .get(targetCwd) as
+        | {
+            id: string;
+            worktree: string;
+            vcs: "git" | null;
+            sandboxes: string;
+            createdAtMs: number;
+            updatedAtMs: number;
+            initializedAtMs: number | null;
+          }
+        | undefined;
+      if (!row) return null;
+      return {
+        id: row.id,
+        worktree: row.worktree,
+        vcs: row.vcs ?? undefined,
+        sandboxes: parseStringArray(row.sandboxes),
+        time: {
+          created: row.createdAtMs,
+          updated: Date.now(),
+          initialized: row.initializedAtMs ?? undefined,
+        },
+      } satisfies OpenCodeProjectRecord;
+    });
+    if (dbProject) return dbProject;
+  }
+
   const files = await listProjectFiles();
   for (const file of files) {
     try {
@@ -459,6 +518,108 @@ async function resolveProject(targetCwd: string, createdAtMs: number): Promise<O
   }
 
   return buildProjectRecord(opencodeProjectIdForCwd(targetCwd), targetCwd, createdAtMs);
+}
+
+async function writeDbSession(
+  project: OpenCodeProjectRecord,
+  sessionRecord: OpenCodeSessionRecord,
+  messages: Array<{ message: OpenCodeMessage; parts: OpenCodePart[] }>,
+): Promise<void> {
+  const result = await withWritableOpenCodeDb((db) => {
+    ensureDbSchema(db);
+    db.exec("BEGIN");
+    try {
+      db.prepare(
+        `insert into project (
+          id, worktree, vcs, sandboxes, time_created, time_updated, time_initialized
+        ) values (?, ?, ?, ?, ?, ?, ?)
+        on conflict(id) do update set
+          worktree=excluded.worktree,
+          vcs=excluded.vcs,
+          sandboxes=excluded.sandboxes,
+          time_updated=excluded.time_updated,
+          time_initialized=excluded.time_initialized`,
+      ).run(
+        project.id,
+        project.worktree,
+        project.vcs ?? null,
+        JSON.stringify(project.sandboxes),
+        project.time.created,
+        project.time.updated,
+        project.time.initialized ?? null,
+      );
+
+      db.prepare(
+        `insert into session (
+          id,
+          project_id,
+          parent_id,
+          slug,
+          directory,
+          title,
+          version,
+          summary_additions,
+          summary_deletions,
+          summary_files,
+          time_created,
+          time_updated
+        ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).run(
+        sessionRecord.id,
+        sessionRecord.projectID,
+        null,
+        sessionRecord.slug,
+        sessionRecord.directory,
+        sessionRecord.title,
+        sessionRecord.version,
+        sessionRecord.summary.additions,
+        sessionRecord.summary.deletions,
+        sessionRecord.summary.files,
+        sessionRecord.time.created,
+        sessionRecord.time.updated,
+      );
+
+      const insertMessage = db.prepare(
+        `insert into message (id, session_id, time_created, time_updated, data)
+         values (?, ?, ?, ?, ?)`,
+      );
+      const insertPart = db.prepare(
+        `insert into part (id, message_id, session_id, time_created, time_updated, data)
+         values (?, ?, ?, ?, ?, ?)`,
+      );
+
+      for (const item of messages) {
+        const messageUpdatedAt = findMessageUpdatedAt(item);
+        insertMessage.run(
+          item.message.id,
+          item.message.sessionID,
+          item.message.time.created,
+          messageUpdatedAt,
+          JSON.stringify(stripMessageEnvelope(item.message)),
+        );
+        for (const part of item.parts) {
+          insertPart.run(
+            part.id,
+            part.messageID,
+            part.sessionID,
+            findPartCreatedAt(part, item.message.time.created),
+            findPartUpdatedAt(part, messageUpdatedAt),
+            JSON.stringify(stripPartEnvelope(part)),
+          );
+        }
+      }
+
+      db.exec("COMMIT");
+      return true;
+    } catch (error) {
+      db.exec("ROLLBACK");
+      throw error;
+    }
+  });
+
+  if (result === null) {
+    throw new Error("Unable to open OpenCode database for writing");
+  }
 }
 
 function extractFirstUserText(entries: IREntry[]): string | undefined {
@@ -517,4 +678,122 @@ function findMessageUpdatedAt(item: { message: OpenCodeMessage; parts: OpenCodeP
       ? item.message.time.completed || item.message.time.created
       : item.message.time.created;
   return findLastPartTimestamp(item.parts, base);
+}
+
+function findPartCreatedAt(part: OpenCodePart, fallback: number): number {
+  if ("time" in part && part.time && typeof part.time.start === "number") {
+    return part.time.start;
+  }
+  return fallback;
+}
+
+function findPartUpdatedAt(part: OpenCodePart, fallback: number): number {
+  if ("time" in part && part.time) {
+    if (typeof part.time.end === "number") return part.time.end;
+    if (typeof part.time.start === "number") return part.time.start;
+  }
+  return fallback;
+}
+
+function stripMessageEnvelope(message: OpenCodeMessage): Omit<OpenCodeMessage, "id" | "sessionID"> {
+  const { id: _id, sessionID: _sessionID, ...data } = message;
+  return data;
+}
+
+function stripPartEnvelope(
+  part: OpenCodePart,
+): Omit<OpenCodePart, "id" | "sessionID" | "messageID"> {
+  const { id: _id, sessionID: _sessionID, messageID: _messageID, ...data } = part;
+  return data;
+}
+
+function parseStringArray(value: string): string[] {
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+function ensureDbSchema(db: OpenCodeDb): void {
+  db.exec(`
+    create table if not exists project (
+      id text primary key,
+      worktree text not null,
+      vcs text,
+      name text,
+      icon_url text,
+      icon_color text,
+      time_created integer not null,
+      time_updated integer not null,
+      time_initialized integer,
+      sandboxes text not null,
+      commands text
+    );
+    create table if not exists session (
+      id text primary key,
+      project_id text not null,
+      parent_id text,
+      slug text not null,
+      directory text not null,
+      title text not null,
+      version text not null,
+      share_url text,
+      summary_additions integer,
+      summary_deletions integer,
+      summary_files integer,
+      summary_diffs text,
+      revert text,
+      permission text,
+      time_created integer not null,
+      time_updated integer not null,
+      time_compacting integer,
+      time_archived integer,
+      workspace_id text
+    );
+    create table if not exists message (
+      id text primary key,
+      session_id text not null,
+      time_created integer not null,
+      time_updated integer not null,
+      data text not null
+    );
+    create table if not exists part (
+      id text primary key,
+      message_id text not null,
+      session_id text not null,
+      time_created integer not null,
+      time_updated integer not null,
+      data text not null
+    );
+    create index if not exists message_session_time_created_id_idx on message (session_id, time_created, id);
+    create index if not exists part_session_idx on part (session_id);
+    create index if not exists part_message_id_id_idx on part (message_id, id);
+    create index if not exists session_project_idx on session (project_id);
+  `);
+}
+
+async function withWritableOpenCodeDb<T>(run: (db: OpenCodeDb) => T): Promise<T | null> {
+  let DatabaseSync: typeof import("node:sqlite").DatabaseSync;
+  try {
+    ({ DatabaseSync } = await import("node:sqlite"));
+  } catch {
+    return null;
+  }
+
+  await ensureDir(dirname(OPENCODE_DB));
+
+  let db: OpenCodeDb;
+  try {
+    db = new DatabaseSync(OPENCODE_DB);
+  } catch {
+    return null;
+  }
+
+  try {
+    return run(db);
+  } finally {
+    db.close();
+  }
 }
