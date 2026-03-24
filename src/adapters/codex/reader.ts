@@ -172,6 +172,8 @@ export class CodexAdapter implements ToolAdapter {
       source_session_id: (p.id as string) ?? "",
       cwd: (p.cwd as string) ?? "",
       git_branch: git?.branch as string | undefined,
+      title: (p.title as string) ?? undefined,
+      model: (p.model as string) ?? undefined,
       created_at: (p.timestamp as string) ?? line.timestamp,
     };
   }

@@ -116,6 +116,12 @@ function convertSessionMeta(
   if (entry.git_branch) {
     payload.git = { branch: entry.git_branch };
   }
+  if (entry.title) {
+    payload.title = entry.title;
+  }
+  if (entry.model) {
+    payload.model = entry.model;
+  }
 
   return {
     timestamp: entry.created_at,
@@ -155,7 +161,19 @@ function convertUserMessage(entry: IRUserMessage): CodexLine[] {
 function convertAssistantMessage(entry: IRAssistantMessage): CodexLine[] {
   const lines: CodexLine[] = [];
 
-  // If there is thinking/reasoning, emit it first.
+  // Emit the assistant message.
+  lines.push({
+    timestamp: entry.timestamp,
+    type: "response_item",
+    payload: {
+      type: "message",
+      role: "assistant",
+      content: [{ type: "output_text", text: entry.content }],
+    },
+  });
+
+  // Emit reasoning after the assistant message so the reader can
+  // attach it to the preceding assistant turn.
   if (entry.thinking) {
     lines.push({
       timestamp: entry.timestamp,
@@ -168,17 +186,6 @@ function convertAssistantMessage(entry: IRAssistantMessage): CodexLine[] {
       },
     });
   }
-
-  // Emit the assistant message.
-  lines.push({
-    timestamp: entry.timestamp,
-    type: "response_item",
-    payload: {
-      type: "message",
-      role: "assistant",
-      content: [{ type: "output_text", text: entry.content }],
-    },
-  });
 
   return lines;
 }

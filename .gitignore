@@ -46,3 +46,5 @@ tmp/
 # ignore private backend
 src/adapters/private
 private
+.conductor
+conductor.log

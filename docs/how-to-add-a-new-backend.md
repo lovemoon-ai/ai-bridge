@@ -46,13 +46,11 @@ Therefore:
 
 Currently supported backends (run `node ./dist/index.js --list-backend` for authoritative list):
 
-- `aiden`
 - `claude`
 - `codex`
 - `copilot`
 - `kimi`
-- `trae`
-- `traecli`
+- `opencode`
 
 ## 3) Steps to Add a New Backend
 

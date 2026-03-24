@@ -1,10 +1,7 @@
 import type { ToolName } from "../types.js";
 import { getAdapter, listSupportedTools } from "../adapters/registry.js";
-import { ensureDir } from "../utils/fs.js";
-import { writeJsonl } from "../utils/fs.js";
 import { spawnInteractive } from "../utils/spawn.js";
-import { homedir } from "node:os";
-import { join } from "node:path";
+import { bridgeSessionBetweenBackends } from "../api.js";
 
 export interface BridgeOptions {
   dryRun?: boolean;
@@ -89,17 +86,9 @@ export async function bridgeCommand(
     log(`  Filtered out ${filteredCount} tool-related entries (--skip-tools)`);
   }
 
-  // ── Step 3: Save IR (always) ─────────────────────────────
-  const irDir = join(homedir(), ".ai-bridge", "sessions");
-  const irPath = join(irDir, `${source.tool}_${session.sessionId}.jsonl`);
-  await ensureDir(irDir);
-  await writeJsonl(irPath, entries);
-  log(`[3/5] Saved IR to ${irPath}`);
-
-  // ── Step 4: Write to target ──────────────────────────────
-  const targetCwd = session.cwd || process.cwd();
-
   if (opts.dryRun) {
+    const targetCwd = session.cwd || process.cwd();
+    const irPath = `~/.ai-bridge/sessions/${source.tool}_${session.sessionId}.jsonl`;
     console.log("\n  Dry-run summary:");
     console.log(`  ─────────────────────────────────────`);
     console.log(`  Source:      ${source.tool}:${session.sessionId}`);
@@ -123,17 +112,25 @@ export async function bridgeCommand(
     return;
   }
 
-  log(`[4/5] Writing session to ${targetTool}...`);
+  log(`[3/5] Saving IR and writing session to ${targetTool}...`);
+  const result = await bridgeSessionBetweenBackends({
+    sourceTool: source.tool,
+    sourceSessionId: session.sessionId,
+    sourceSessionPath: session.path,
+    sourceSessionInfo: session,
+    targetTool,
+    skipTools: opts.skipTools,
+    targetCwdFallback: process.cwd(),
+  });
   const targetAdapter = await getAdapter(targetTool);
-  const newId = await targetAdapter.write(entries, targetCwd);
   console.log(`\n  Session bridged successfully!`);
   console.log(`  ─────────────────────────────────────`);
   console.log(`  Source:      ${source.tool}:${session.sessionId.slice(0, 8)}`);
-  console.log(`  Target:      ${targetTool}:${newId.slice(0, 8)}`);
-  console.log(`  IR file:     ${irPath}`);
+  console.log(`  Target:      ${targetTool}:${result.sessionId.slice(0, 8)}`);
+  console.log(`  IR file:     ${result.irPath}`);
 
   // ── Step 5: Spawn target tool ────────────────────────────
-  const resumeCmd = targetAdapter.getResumeCommand(newId, targetCwd);
+  const resumeCmd = targetAdapter.getResumeCommand(result.sessionId, result.cwd);
   console.log(`  Resume cmd:  ${resumeCmd.command} ${resumeCmd.args.join(" ")}\n`);
 
   log(`[5/5] Spawning ${targetTool}...`);

@@ -17,7 +17,7 @@ No problem.
 
 ## ✨ Core Features
 
-- **🔀 Seamless Migration** - Migrate sessions between Claude, Codex, Copilot, Kimi, Trae, and more
+- **🔀 Seamless Migration** - Migrate sessions between Claude, Codex, Copilot, Kimi, OpenCode, Trae, and more
 - **📦 Unified Format** - Intermediate Representation (IR) ensures no data loss
 - **⚡ One-Click Resume** - Auto-generates resume commands for target tools
 - **🔌 Plugin Architecture** - Easily extend with new backends
@@ -47,6 +47,7 @@ ai-bridge --list-session claude
 | Codex | ✅ | ✅ |
 | Copilot | ✅ | ✅ |
 | Kimi | ✅ | ✅ |
+| OpenCode | ✅ | ✅ |
 
 ## 📖 Documentation
 
@@ -59,6 +60,7 @@ src/
 ├── adapters/          # AI tool adapters
 │   ├── claude/
 │   ├── codex/
+│   ├── opencode/
 │   ├── private/       # Private adapters
 │   └── registry.ts    # Dynamic registration
 ├── commands/          # CLI commands
