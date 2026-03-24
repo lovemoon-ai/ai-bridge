@@ -142,6 +142,10 @@ export class OpenCodeAdapter implements ToolAdapter {
 
   async listSessions(): Promise<SessionInfo[]> {
     const projects = await this.loadProjectsById();
+    const currentCwd = process.cwd();
+    const currentProject = Array.from(projects.values()).find(
+      (project) => project.worktree === currentCwd,
+    );
     const files = await listSessionFiles();
     const sessions: SessionInfo[] = [];
 
@@ -163,7 +167,15 @@ export class OpenCodeAdapter implements ToolAdapter {
       }
     }
 
-    return sessions;
+    return sessions.sort((a, b) => {
+      const aCurrent = currentProject && a.cwd === currentProject.worktree ? 1 : 0;
+      const bCurrent = currentProject && b.cwd === currentProject.worktree ? 1 : 0;
+      if (aCurrent !== bCurrent) return bCurrent - aCurrent;
+
+      const ta = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const tb = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return tb - ta;
+    });
   }
 
   async findSession(sessionId: string): Promise<SessionInfo | null> {
