@@ -44,3 +44,30 @@ export async function findSessionIndexes(): Promise<
 
   return results;
 }
+
+/**
+ * Find all top-level Claude session JSONL files across project directories.
+ * This is a compatibility fallback for installations that no longer maintain
+ * sessions-index.json consistently.
+ */
+export async function findSessionFiles(): Promise<
+  { sessionPath: string; projectDir: string }[]
+> {
+  const dirs = await listProjectDirs();
+  const results: { sessionPath: string; projectDir: string }[] = [];
+
+  for (const dir of dirs) {
+    try {
+      const entries = await readdir(dir, { withFileTypes: true });
+      for (const entry of entries) {
+        if (!entry.isFile()) continue;
+        if (!entry.name.endsWith(".jsonl")) continue;
+        results.push({ sessionPath: join(dir, entry.name), projectDir: dir });
+      }
+    } catch {
+      // skip unreadable project directories
+    }
+  }
+
+  return results;
+}

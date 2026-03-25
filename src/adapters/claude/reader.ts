@@ -11,7 +11,7 @@ import type {
 } from "../../types.js";
 import { readJsonl, readJson } from "../../utils/fs.js";
 import { isIdPrefix } from "../../utils/id.js";
-import { findSessionIndexes } from "./utils.js";
+import { findSessionIndexes, findSessionFiles } from "./utils.js";
 import { writeClaudeSession } from "./writer.js";
 
 // ── Claude-native types (partial, only what we need) ─────────
@@ -92,15 +92,30 @@ export class ClaudeAdapter implements ToolAdapter {
   async listSessions(): Promise<SessionInfo[]> {
     const indexes = await findSessionIndexes();
     const sessions: SessionInfo[] = [];
+    const seenSessionIds = new Set<string>();
 
     for (const { indexPath, projectDir } of indexes) {
       try {
         const index = await readJson<ClaudeIndexFile>(indexPath);
         for (const entry of index.entries) {
-          sessions.push(indexEntryToSessionInfo(entry, projectDir));
+          const session = indexEntryToSessionInfo(entry, projectDir);
+          sessions.push(session);
+          seenSessionIds.add(session.sessionId);
         }
       } catch {
         // skip unreadable index files
+      }
+    }
+
+    const files = await findSessionFiles();
+    for (const { sessionPath } of files) {
+      try {
+        const session = await sessionInfoFromFile(sessionPath);
+        if (!session || seenSessionIds.has(session.sessionId)) continue;
+        sessions.push(session);
+        seenSessionIds.add(session.sessionId);
+      } catch {
+        // skip unreadable session files
       }
     }
 
@@ -123,6 +138,19 @@ export class ClaudeAdapter implements ToolAdapter {
         }
       } catch {
         // skip
+      }
+    }
+
+    const files = await findSessionFiles();
+    for (const { sessionPath } of files) {
+      const fileSessionId = basename(sessionPath, ".jsonl");
+      if (!isIdPrefix(sessionId, fileSessionId)) continue;
+
+      try {
+        const session = await sessionInfoFromFile(sessionPath);
+        if (session) return session;
+      } catch {
+        // skip unreadable session files
       }
     }
 
@@ -159,6 +187,46 @@ function indexEntryToSessionInfo(
     createdAt: entry.created,
     path,
   };
+}
+
+async function sessionInfoFromFile(path: string): Promise<SessionInfo | null> {
+  const raw = await readJsonl<ClaudeEntry>(path);
+  if (raw.length === 0) return null;
+
+  const first = raw[0];
+  const firstMessageEntry = raw.find((entry) => entry.message);
+  const sessionId = first.sessionId || basename(path, ".jsonl");
+  const title = deriveTitle(raw);
+  const cwd = firstMessageEntry?.cwd || first.cwd;
+  const createdAt = first.timestamp;
+  const model = raw.find((entry) => entry.message?.model)?.message?.model;
+
+  return {
+    tool: "claude",
+    sessionId,
+    title,
+    cwd,
+    model,
+    createdAt,
+    path,
+  };
+}
+
+function deriveTitle(raw: ClaudeEntry[]): string | undefined {
+  for (const entry of raw) {
+    const content = entry.message?.content;
+    if (typeof content === "string" && content.trim()) {
+      return content.trim().split("\n")[0];
+    }
+    if (Array.isArray(content)) {
+      for (const block of content) {
+        if (block.type === "text" && block.text?.trim()) {
+          return block.text.trim().split("\n")[0];
+        }
+      }
+    }
+  }
+  return undefined;
 }
 
 /**
