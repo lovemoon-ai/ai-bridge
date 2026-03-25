@@ -35,6 +35,23 @@ function createDeps({ sourceAdapter, targetAdapter, writeJsonl } = {}) {
   };
 }
 
+function createSameToolDeps({ tool, sourceAdapter, targetAdapter, writeJsonl } = {}) {
+  let adapterCallCount = 0;
+
+  return {
+    listSupportedTools: async () => ["codex", "claude", "kimi"],
+    getAdapter: async (requestedTool) => {
+      if (requestedTool !== tool) {
+        throw new Error(`unexpected tool: ${requestedTool}`);
+      }
+
+      adapterCallCount += 1;
+      return adapterCallCount === 1 ? sourceAdapter : targetAdapter;
+    },
+    writeJsonl: writeJsonl ?? (async () => {}),
+  };
+}
+
 describe("bridgeSessionBetweenBackends", () => {
   it("prefers an explicit sourceSessionPath over a discovered session path", async () => {
     let readSession = null;
@@ -250,5 +267,50 @@ describe("bridgeSessionBetweenBackends", () => {
     assert.equal(exitCalled, false);
     assert.equal(writeJsonlCalls, 0);
     assert.equal(targetWriteCalls, 0);
+  });
+
+  it("allows same-tool session cloning into a new target session", async () => {
+    let targetWrite = null;
+
+    const sourceAdapter = createAdapter({
+      name: "codex",
+      findSession: async () => ({
+        tool: "codex",
+        sessionId: "source-session-clone",
+        path: "/discovered/source.jsonl",
+        cwd: "/clone-cwd",
+      }),
+      read: async () => [
+        {
+          ir_version: "1",
+          type: "session_meta",
+          source_tool: "codex",
+          source_session_id: "source-session-clone",
+          cwd: "/clone-cwd",
+          created_at: "2024-01-04T00:00:00.000Z",
+        },
+      ],
+    });
+    const targetAdapter = createAdapter({
+      name: "codex",
+      write: async (_entries, cwd) => {
+        targetWrite = cwd;
+        return "cloned-session-1";
+      },
+    });
+
+    const result = await bridgeSessionBetweenBackends(
+      {
+        sourceTool: "codex",
+        sourceSessionId: "source-session-clone",
+        targetTool: "codex",
+        irRootDir: "/tmp/ai-bridge-tests",
+      },
+      createSameToolDeps({ tool: "codex", sourceAdapter, targetAdapter }),
+    );
+
+    assert.equal(targetWrite, "/clone-cwd");
+    assert.equal(result.sessionId, "cloned-session-1");
+    assert.equal(result.cwd, "/clone-cwd");
   });
 });

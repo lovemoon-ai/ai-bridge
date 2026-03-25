@@ -172,10 +172,6 @@ export async function bridgeSessionBetweenBackends(
   if (!supportedTools.includes(targetTool)) {
     throw new Error(`Unsupported target tool: ${targetTool}`);
   }
-  if (sourceTool === targetTool) {
-    throw new Error("bridgeSessionBetweenBackends requires different source/target tools");
-  }
-
   const sourceSession = await resolveSourceSession({
     sourceTool,
     sourceSessionId,
