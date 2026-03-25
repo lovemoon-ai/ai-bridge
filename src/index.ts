@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { readFileSync } from "node:fs";
 import { Command } from "commander";
 import { bridgeCommand } from "./commands/bridge.js";
 import { listCommand } from "./commands/list.js";
@@ -7,11 +8,14 @@ import { updateCommand } from "./commands/update.js";
 import { listSupportedTools } from "./adapters/registry.js";
 
 const program = new Command();
+const packageJson = JSON.parse(
+  readFileSync(new URL("../package.json", import.meta.url), "utf-8"),
+) as { version?: string };
 
 program
   .name("ai-bridge")
   .description("Cross-AI-Tool Session Sharing CLI")
-  .version("0.1.0");
+  .version(packageJson.version || "0.0.0");
 
 // ── Main bridge command ─────────────────────────────────────
 program
