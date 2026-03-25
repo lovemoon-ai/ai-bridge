@@ -5,6 +5,10 @@ import { fileExists } from "../../utils/fs.js";
 
 /** Root directory where Claude stores per-project data. */
 export const CLAUDE_BASE = join(homedir(), ".claude", "projects");
+/** Claude per-session task state root. */
+export const CLAUDE_TASKS_BASE = join(homedir(), ".claude", "tasks");
+/** Claude per-session environment root. */
+export const CLAUDE_SESSION_ENV_BASE = join(homedir(), ".claude", "session-env");
 
 /**
  * List all encoded-path directories under ~/.claude/projects/.

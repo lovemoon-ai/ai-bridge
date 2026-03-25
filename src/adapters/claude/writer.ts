@@ -1,3 +1,4 @@
+import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type {
   IREntry,
@@ -7,9 +8,19 @@ import type {
   IRToolCall,
   IRToolResult,
 } from "../../types.js";
-import { writeJsonl, readJson, writeJson, fileExists } from "../../utils/fs.js";
+import {
+  ensureDir,
+  writeJsonl,
+  readJson,
+  writeJson,
+  fileExists,
+} from "../../utils/fs.js";
 import { uuid, isoNow, encodeClaudePath } from "../../utils/id.js";
-import { CLAUDE_BASE } from "./utils.js";
+import {
+  CLAUDE_BASE,
+  CLAUDE_TASKS_BASE,
+  CLAUDE_SESSION_ENV_BASE,
+} from "./utils.js";
 
 // ── Claude-native output types ───────────────────────────────
 
@@ -86,6 +97,7 @@ export async function writeClaudeSession(
 
   // Write the session JSONL
   await writeJsonl(sessionPath, lines);
+  await initializeClaudeResumeState(sessionId);
 
   // Update sessions-index.json
   const firstPrompt = extractFirstPrompt(entries);
@@ -325,4 +337,19 @@ async function updateSessionsIndex(
   index.entries.push(newEntry);
 
   await writeJson(indexPath, index);
+}
+
+/**
+ * Claude CLI refuses `--resume <sessionId>` for synthetic sessions unless the
+ * per-session task state directory already exists under ~/.claude/tasks.
+ * Real Claude sessions also have an empty session-env directory, so we create
+ * both here to match the expected on-disk shape.
+ */
+async function initializeClaudeResumeState(sessionId: string): Promise<void> {
+  const taskDir = join(CLAUDE_TASKS_BASE, sessionId);
+  await ensureDir(taskDir);
+  await writeFile(join(taskDir, ".lock"), "", "utf-8");
+  await writeFile(join(taskDir, ".highwatermark"), "0", "utf-8");
+
+  await ensureDir(join(CLAUDE_SESSION_ENV_BASE, sessionId));
 }
