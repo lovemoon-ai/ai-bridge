@@ -109,14 +109,15 @@ export class KimiAdapter implements ToolAdapter {
       }
     }
 
-    const fallbackTs = isoNow();
+    const fallbackBaseMs = Date.parse(session.createdAt ?? isoNow());
     let wireIdx = 0;
+    let fallbackIdx = 0;
 
     const nextTimestamp = (): string => {
       if (wireIdx < wireTimestamps.length) {
         return wireTimestamps[wireIdx++];
       }
-      return fallbackTs;
+      return new Date(fallbackBaseMs + fallbackIdx++).toISOString();
     };
 
     const entries: IREntry[] = [];
@@ -130,7 +131,7 @@ export class KimiAdapter implements ToolAdapter {
       cwd: session.cwd ?? process.cwd(),
       title: session.title,
       model: session.model,
-      created_at: session.createdAt ?? fallbackTs,
+      created_at: session.createdAt ?? new Date(fallbackBaseMs).toISOString(),
     };
     entries.push(meta);
 
